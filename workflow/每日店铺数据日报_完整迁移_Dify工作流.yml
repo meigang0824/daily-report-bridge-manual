@@ -1,0 +1,143 @@
+app:
+  description: "上传{运营姓名}-负责店铺列表与补单 Excel；在共享知识库中按运营累积日报，并直接返回最新版 Excel。"
+  icon: "📊"
+  icon_background: "#E8F5E9"
+  mode: "workflow"
+  name: "每日店铺数据日报-上传累积版"
+  use_icon_as_answer_icon: false
+kind: "app"
+version: "0.6.0"
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods: ["local_file"]
+      number_limits: 3
+    opening_statement: ""
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions: []
+    suggested_questions_after_answer: {enabled: false}
+    text_to_speech: {enabled: false, language: "", voice: ""}
+  graph:
+    edges:
+      - data: {isInIteration: false, sourceType: "start", targetType: "http-request"}
+        id: "start-source-generate-target"
+        selected: false
+        source: "start"
+        sourceHandle: "source"
+        target: "generate_from_uploads"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+      - data: {isInIteration: false, sourceType: "http-request", targetType: "end"}
+        id: "generate-source-end-target"
+        selected: false
+        source: "generate_from_uploads"
+        sourceHandle: "source"
+        target: "end"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+    nodes:
+      - data:
+          desc: "直接上传 Excel 文件。店铺名单文件须命名为{运营姓名}-负责店铺列表.xlsx；补单可一次上传多个文件。"
+          selected: false
+          title: "上传输入"
+          type: "start"
+          variables:
+            - label: "数据日期（YYYY-MM-DD）"
+              max_length: 20
+              options: []
+              required: true
+              type: "text-input"
+              variable: "data_date"
+            - allowed_file_extensions: [".xls", ".xlsx"]
+              allowed_file_types: ["custom"]
+              allowed_file_upload_methods: ["local_file"]
+              label: "{运营姓名}-负责店铺列表.xlsx"
+              required: true
+              type: "file"
+              variable: "shop_list_file"
+            - allowed_file_extensions: [".xls", ".xlsx"]
+              allowed_file_types: ["custom"]
+              allowed_file_upload_methods: ["local_file"]
+              label: "补单 Excel（可多选）"
+              max_length: 20
+              required: true
+              type: "file-list"
+              variable: "supplement_files"
+        height: 230
+        id: "start"
+        position: {x: 80, y: 240}
+        positionAbsolute: {x: 80, y: 240}
+        selected: false
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 300
+      - data:
+          authorization: {type: "no-auth"}
+          body:
+            data:
+              - key: "data_date"
+                type: "text"
+                value: "{{#start.data_date#}}"
+              - file: ["start", "shop_list_file"]
+                key: "shop_list_file"
+                type: "file"
+              - file: ["start", "supplement_files"]
+                key: "supplement_files"
+                type: "file"
+            type: "form-data"
+          desc: "按名单文件名识别运营；读取并替换共享知识库中该运营日报，完成后直接响应最新版 Excel 文件。"
+          headers: ""
+          method: "post"
+          params: ""
+          retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 1000}
+          selected: false
+          timeout: {connect: 10, max_connect_timeout: 10, max_read_timeout: 180, max_write_timeout: 180, read: 180, write: 180}
+          title: "累积生成并替换日报"
+          type: "http-request"
+          url: "http://host.docker.internal:8767/v1/workflow/run-files-download"
+          variables: []
+        height: 150
+        id: "generate_from_uploads"
+        position: {x: 470, y: 260}
+        positionAbsolute: {x: 470, y: 260}
+        selected: false
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 330
+      - data:
+          desc: "直接返回本次生成的累计日报 Excel 文件，供下载使用。"
+          outputs:
+            - value_selector: ["generate_from_uploads", "files"]
+              value_type: "array[file]"
+              variable: "report_file"
+            - value_selector: ["generate_from_uploads", "body"]
+              value_type: "string"
+              variable: "message"
+            - value_selector: ["generate_from_uploads", "status_code"]
+              value_type: "number"
+              variable: "http_status"
+          selected: false
+          title: "日报结果"
+          type: "end"
+        height: 110
+        id: "end"
+        position: {x: 900, y: 280}
+        positionAbsolute: {x: 900, y: 280}
+        selected: false
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 260
+    viewport: {x: 0, y: 0, zoom: 0.8}
