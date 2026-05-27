@@ -1,0 +1,168 @@
+app:
+  description: "上传运营负责店铺列表，查询指定日期与上一日的经营数据，由 AI 生成日环比复盘报告。"
+  icon: "📈"
+  icon_background: "#E8F5E9"
+  mode: "workflow"
+  name: "昨日经营复盘：日环比"
+  use_icon_as_answer_icon: false
+kind: "app"
+version: "0.6.0"
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+      image: {enabled: false, number_limits: 3, transfer_methods: ["local_file"]}
+      number_limits: 1
+    opening_statement: ""
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions: []
+    suggested_questions_after_answer: {enabled: false}
+    text_to_speech: {enabled: false, language: "", voice: ""}
+  graph:
+    edges:
+      - data: {isInIteration: false, sourceType: "start", targetType: "http-request"}
+        id: "start-source-fetch-target"
+        source: "start"
+        sourceHandle: "source"
+        target: "fetch_data"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+      - data: {isInIteration: false, sourceType: "http-request", targetType: "llm"}
+        id: "fetch-source-review-target"
+        source: "fetch_data"
+        sourceHandle: "source"
+        target: "review_llm"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+      - data: {isInIteration: false, sourceType: "llm", targetType: "end"}
+        id: "review-source-end-target"
+        source: "review_llm"
+        sourceHandle: "source"
+        target: "end"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+    nodes:
+      - data:
+          desc: "店铺名单文件名必须为{运营姓名}-负责店铺列表.xlsx。复盘日期应为数据库已有数据日期。"
+          title: "复盘输入"
+          type: "start"
+          variables:
+            - label: "复盘日期（YYYY-MM-DD）"
+              max_length: 20
+              options: []
+              required: true
+              type: "text-input"
+              variable: "data_date"
+            - allowed_file_extensions: [".xls", ".xlsx"]
+              allowed_file_types: ["custom"]
+              allowed_file_upload_methods: ["local_file"]
+              label: "{运营姓名}-负责店铺列表.xlsx"
+              required: true
+              type: "file"
+              variable: "shop_list_file"
+        height: 180
+        id: "start"
+        position: {x: 60, y: 250}
+        positionAbsolute: {x: 60, y: 250}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 300
+      - data:
+          authorization: {type: "no-auth"}
+          body:
+            data:
+              - key: "data_date"
+                type: "text"
+                value: "{{#start.data_date#}}"
+              - file: ["start", "shop_list_file"]
+                key: "shop_list_file"
+                type: "file"
+            type: "form-data"
+          desc: "只读查询指定日和上一日的店铺、商品、投放与评分数据。"
+          headers: ""
+          method: "post"
+          params: ""
+          retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 1000}
+          timeout: {connect: 10, max_connect_timeout: 10, max_read_timeout: 120, max_write_timeout: 120, read: 120, write: 120}
+          title: "获取日环比数据"
+          type: "http-request"
+          url: "http://host.docker.internal:8768/v1/analysis/daily-comparison"
+          variables: []
+        height: 130
+        id: "fetch_data"
+        position: {x: 420, y: 270}
+        positionAbsolute: {x: 420, y: 270}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 320
+      - data:
+          context: {enabled: false, variable_selector: []}
+          desc: "仅依据接口数据生成昨日经营复盘，不补造数据。"
+          model:
+            completion_params: {temperature: 0.2}
+            mode: "chat"
+            name: "gpt-4o-mini"
+            provider: "openai"
+          prompt_template:
+            - id: "daily-review-system"
+              role: "system"
+              text: |
+                你是一名严谨的电商运营复盘分析师。你只能基于用户提供的 JSON 数据写分析，不得虚构原因、目标、活动或数据。
+                如果 JSON 中 success 为 false，只输出失败原因和用户应修正的输入，不进行经营分析。
+                所有金额保留两位小数，变化率使用百分号，比例指标变化使用百分点（pp）。
+                对数据缺失、日期覆盖不足和无法比较的指标必须明确说明。
+                输出使用 Markdown，内容务实、便于运营执行。
+            - id: "daily-review-user"
+              role: "user"
+              text: |
+                请根据以下只读查询结果，生成《昨日经营复盘：日环比》。
+
+                报告结构：
+                1. 复盘范围：运营、店铺数、本期日期、对比日期、数据完整性提示。
+                2. 核心结论：用 3 至 5 条说明净销售额、订单、访客、转化率、退款率、推广费率、经营支出率的关键变化。
+                3. 核心指标表：展示本期、上一日、差额/百分点变化、环比。
+                4. 店铺贡献与风险：重点展开净销售额贡献高、下滑明显、高退款率或高推广费率店铺，不必机械复述全部店铺。
+                5. 商品与投放线索：从商品成交及广告 Top 数据中指出值得核查的商品；仅写“线索”而非确定原因。
+                6. 今日行动建议：给出 3 至 5 项与数据对应的核查/优化动作。
+
+                接口 JSON：
+                {{#fetch_data.body#}}
+          selected: false
+          title: "AI 生成日环比复盘"
+          type: "llm"
+          variables: []
+          vision: {enabled: false}
+        height: 130
+        id: "review_llm"
+        position: {x: 800, y: 270}
+        positionAbsolute: {x: 800, y: 270}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 300
+      - data:
+          desc: "返回 AI 生成的昨日经营复盘报告。"
+          outputs:
+            - value_selector: ["review_llm", "text"]
+              value_type: "string"
+              variable: "review_report"
+          title: "复盘结果"
+          type: "end"
+        height: 100
+        id: "end"
+        position: {x: 1160, y: 290}
+        positionAbsolute: {x: 1160, y: 290}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 260
+    viewport: {x: 0, y: 0, zoom: 0.8}

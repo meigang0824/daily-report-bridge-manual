@@ -1,0 +1,169 @@
+app:
+  description: "上传运营负责店铺列表，查询截至指定日期的近7日与此前7日经营数据，由 AI 生成环比复盘报告。"
+  icon: "📊"
+  icon_background: "#E3F2FD"
+  mode: "workflow"
+  name: "近7日经营复盘：前7日环比"
+  use_icon_as_answer_icon: false
+kind: "app"
+version: "0.6.0"
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+      image: {enabled: false, number_limits: 3, transfer_methods: ["local_file"]}
+      number_limits: 1
+    opening_statement: ""
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions: []
+    suggested_questions_after_answer: {enabled: false}
+    text_to_speech: {enabled: false, language: "", voice: ""}
+  graph:
+    edges:
+      - data: {isInIteration: false, sourceType: "start", targetType: "http-request"}
+        id: "start-source-fetch-target"
+        source: "start"
+        sourceHandle: "source"
+        target: "fetch_data"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+      - data: {isInIteration: false, sourceType: "http-request", targetType: "llm"}
+        id: "fetch-source-review-target"
+        source: "fetch_data"
+        sourceHandle: "source"
+        target: "review_llm"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+      - data: {isInIteration: false, sourceType: "llm", targetType: "end"}
+        id: "review-source-end-target"
+        source: "review_llm"
+        sourceHandle: "source"
+        target: "end"
+        targetHandle: "target"
+        type: "custom"
+        zIndex: 0
+    nodes:
+      - data:
+          desc: "截止日期向前含当日共7天为本期；再向前7天为对比期。名单文件名必须符合约定。"
+          title: "复盘输入"
+          type: "start"
+          variables:
+            - label: "截止日期（YYYY-MM-DD）"
+              max_length: 20
+              options: []
+              required: true
+              type: "text-input"
+              variable: "end_date"
+            - allowed_file_extensions: [".xls", ".xlsx"]
+              allowed_file_types: ["custom"]
+              allowed_file_upload_methods: ["local_file"]
+              label: "{运营姓名}-负责店铺列表.xlsx"
+              required: true
+              type: "file"
+              variable: "shop_list_file"
+        height: 180
+        id: "start"
+        position: {x: 60, y: 250}
+        positionAbsolute: {x: 60, y: 250}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 300
+      - data:
+          authorization: {type: "no-auth"}
+          body:
+            data:
+              - key: "end_date"
+                type: "text"
+                value: "{{#start.end_date#}}"
+              - file: ["start", "shop_list_file"]
+                key: "shop_list_file"
+                type: "file"
+            type: "form-data"
+          desc: "只读查询近7日和此前7日的趋势、店铺、商品、投放与评分数据。"
+          headers: ""
+          method: "post"
+          params: ""
+          retry_config: {retry_enabled: false, max_retries: 0, retry_interval: 1000}
+          timeout: {connect: 10, max_connect_timeout: 10, max_read_timeout: 120, max_write_timeout: 120, read: 120, write: 120}
+          title: "获取7日环比数据"
+          type: "http-request"
+          url: "http://host.docker.internal:8768/v1/analysis/rolling-7d-comparison"
+          variables: []
+        height: 130
+        id: "fetch_data"
+        position: {x: 420, y: 270}
+        positionAbsolute: {x: 420, y: 270}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 320
+      - data:
+          context: {enabled: false, variable_selector: []}
+          desc: "仅依据接口数据生成近7日经营复盘，不补造数据。"
+          model:
+            completion_params: {temperature: 0.2}
+            mode: "chat"
+            name: "gpt-4o-mini"
+            provider: "openai"
+          prompt_template:
+            - id: "weekly-review-system"
+              role: "system"
+              text: |
+                你是一名严谨的电商运营周度复盘分析师。你只能基于用户提供的 JSON 数据写分析，不得虚构原因、目标、活动或数据。
+                如果 JSON 中 success 为 false，只输出失败原因和用户应修正的输入，不进行经营分析。
+                所有金额保留两位小数，变化率使用百分号，比例指标变化使用百分点（pp）。
+                对数据缺失、周期不完整和无法比较的指标必须明确说明。
+                输出使用 Markdown，聚焦重要变化和下一周期动作。
+            - id: "weekly-review-user"
+              role: "user"
+              text: |
+                请根据以下只读查询结果，生成《近7日经营复盘：前7日环比》。
+
+                报告结构：
+                1. 复盘范围：运营、店铺数、本期7天、此前7天、数据完整性提示。
+                2. 周期结论：用 3 至 5 条概括销售、订单、流量、转化、退款、推广和费用效率变化。
+                3. 核心指标环比表：展示本期、前7日、差额/百分点变化、环比。
+                4. 日趋势观察：根据 daily_trend 点出峰谷与波动日期，不臆测活动原因。
+                5. 店铺贡献与拖累：重点写增长贡献、下滑拖累与风险店铺。
+                6. 商品与投放复盘：指出成交贡献商品、高花费投放及 ROI 变化线索。
+                7. 下一周期动作建议：给出 3 至 6 项可执行动作。
+
+                接口 JSON：
+                {{#fetch_data.body#}}
+          selected: false
+          title: "AI 生成7日环比复盘"
+          type: "llm"
+          variables: []
+          vision: {enabled: false}
+        height: 130
+        id: "review_llm"
+        position: {x: 800, y: 270}
+        positionAbsolute: {x: 800, y: 270}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 300
+      - data:
+          desc: "返回 AI 生成的近7日经营复盘报告。"
+          outputs:
+            - value_selector: ["review_llm", "text"]
+              value_type: "string"
+              variable: "review_report"
+          title: "复盘结果"
+          type: "end"
+        height: 100
+        id: "end"
+        position: {x: 1160, y: 290}
+        positionAbsolute: {x: 1160, y: 290}
+        sourcePosition: "right"
+        targetPosition: "left"
+        type: "custom"
+        width: 260
+    viewport: {x: 0, y: 0, zoom: 0.8}

@@ -3,9 +3,12 @@
 这个目录可以手动启动 Dify 日报桥接接口。它包含：
 
 - `bridge/daily_report_bridge.py`：Dify 调用的 HTTP 接口。
+- `bridge/operations_data_bridge.py`：经营复盘工作流使用的只读数据接口。
 - `legacy/main.py`：报表生成核心逻辑的脱敏副本。
 - `bridge/requirements.txt`：Python 依赖。
 - `workflow/每日店铺数据日报_完整迁移_Dify工作流.yml`：当前 Dify 工作流 DSL。
+- `workflow/运营经营数据分析_昨日经营复盘_日环比_Dify工作流.yml`：昨日经营复盘工作流 DSL。
+- `workflow/运营经营数据分析_近7日经营复盘_前7日环比_Dify工作流.yml`：近 7 日经营复盘工作流 DSL。
 - `fixtures/daily_query_fixture.json`：仅供本地回归验证使用的测试数据。
 
 ## 启动步骤
@@ -26,6 +29,30 @@ chmod +x start.sh
 ```bash
 curl http://localhost:8767/health
 ```
+
+## 经营复盘只读接口
+
+经营复盘服务独立监听 `8768`，只查询数据库并返回结构化 JSON，不生成分析结论，也不修改日报或知识库内容：
+
+```bash
+chmod +x start_analysis.sh
+./start_analysis.sh
+curl http://localhost:8768/health
+```
+
+两个 Dify 经营复盘工作流使用以下接口：
+
+```text
+POST http://host.docker.internal:8768/v1/analysis/daily-comparison
+POST http://host.docker.internal:8768/v1/analysis/rolling-7d-comparison
+```
+
+| 接口 | 日期参数 | 比较口径 |
+| --- | --- | --- |
+| `daily-comparison` | `data_date` | 指定日期对比上一天 |
+| `rolling-7d-comparison` | `end_date` | 截止日期向前 7 天对比此前 7 天 |
+
+两者都接收 `shop_list_file`，文件名必须为 `{运营姓名}-负责店铺列表.xlsx`。接口返回店铺、商品、投放、评分、趋势与数据覆盖情况，分析文字由 Dify 工作流中的 AI 节点生成。
 
 ## 接管当前端口
 
