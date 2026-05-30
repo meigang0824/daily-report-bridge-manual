@@ -122,12 +122,6 @@ workflow:
             - value_selector: ["generate_from_uploads", "files"]
               value_type: "array[file]"
               variable: "report_file"
-            - value_selector: ["generate_from_uploads", "body"]
-              value_type: "string"
-              variable: "message"
-            - value_selector: ["generate_from_uploads", "status_code"]
-              value_type: "number"
-              variable: "http_status"
           selected: false
           title: "日报结果"
           type: "end"
